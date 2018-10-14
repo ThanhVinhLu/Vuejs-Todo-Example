@@ -2,7 +2,7 @@
   <div id="container">
     <input type="text" class="todo-input" placeholder="Add your todo here"
            v-model="newTodo" @keyup.enter="addNewTodo"/>
-    <div v-for="(todo, index) in todoList" :key="todo.id" class="todo-item">
+    <div v-for="(todo, index) in filteredTodoList" :key="index" class="todo-item">
       <div class="todo-item-left">
         <input type="checkbox" v-model="todo.completed" v-on:click="handleComplete(todo)"/>
         <div class="todo-item-label" v-if="!todo.editing" v-on:dblclick="editTodo(todo)"
@@ -12,7 +12,7 @@
         <input class="todo-item-edit" v-model="todo.title" type="text" v-else
         v-on:blur="finishEdit(todo)" @keyup.enter="finishEdit(todo)" v-focus/>
       </div>
-      <div class="todo-remove" v-on:click="removeTodo(index)"> &times; </div>
+      <div class="todo-remove" v-on:click="removeTodo(todo.id)"> &times; </div>
     </div>
     <div class="extra-container">
       <div>
@@ -21,51 +21,69 @@
       </div>
       <div>{{remainingItem}} items left</div>
     </div>
+    <div class="extra-container">
+      <div>
+        <button :class="{ active: this.filter === 'all' }" v-on:click="changeFilter('all')">
+          All
+        </button>
+        <button :class="{ active: this.filter === 'active' }" v-on:click="changeFilter('active')">
+          Active
+        </button>
+        <button :class="{ active: this.filter === 'completed' }" v-on:click="changeFilter('completed')">
+          Completed
+        </button>
+      </div>
+      <div>
+        <button v-if="this.clearButton" v-on:click="clearCompleted">Clear completed</button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
+
+import axios from 'axios'
+const BASE_URL = 'http://localhost:3000'
 export default {
   name: 'TodoList',
   data () {
     return {
       newTodo: '',
-      idForTodo: 3,
       originalEditTitle: '',
       checkAll: false,
-      todoList: [
-        {
-          'id': 1,
-          'title': 'Learn Vue js',
-          'completed': false,
-          'editing': false
-        },
-        {
-          'id': 2,
-          'title': 'Vuetify also',
-          'completed': false,
-          'editing': false
-        }
-      ]
+      filter: 'all',
+      todoList: []
     }
   },
 
   methods: {
+    getTodoList () {
+      axios.get(BASE_URL + '/todoList').then(response => {
+        this.todoList = response.data
+      })
+    },
     addNewTodo () {
       if (this.newTodo) {
-        this.todoList.push({
-          id: this.idForTodo,
+        axios.post(BASE_URL + '/todoList', {
           title: this.newTodo,
           completed: false,
           editing: false
+        }).then(
+          this.getTodoList
+        ).catch(error => {
+          console.log(error)
         })
-
-        this.idForTodo++
         this.newTodo = ''
       }
     },
-    removeTodo (index) {
-      this.todoList.splice(index, 1)
+    removeTodo (id) {
+      axios.delete(BASE_URL + '/todoList/' + id)
+        .then(
+          this.getTodoList
+        )
+        .catch(error => {
+          console.log(error)
+        })
     },
     editTodo (todo) {
       if (!todo.completed) {
@@ -74,17 +92,59 @@ export default {
       }
     },
     finishEdit (todo) {
+      todo.editing = false
       if (!todo.title) {
         todo.title = this.originalEditTitle
+      } else {
+        axios.put(BASE_URL + '/todoList/' + todo.id, {
+          title: todo.title,
+          completed: todo.completed,
+          editing: todo.editing
+        })
+          .then(
+            this.getTodoList
+          )
+          .catch(error => {
+            console.log(error)
+          })
       }
-      todo.editing = false
     },
     handleComplete (todo) {
-      todo.completed = !todo.completed
+      axios.put(BASE_URL + '/todoList/' + todo.id, {
+        title: todo.title,
+        completed: !todo.completed,
+        editing: todo.editing
+      })
+        .then(
+          this.getTodoList
+        )
+        .catch(error => {
+          console.log(error)
+        })
     },
     checkAllTodo () {
       this.todoList.map(todo => {
-        todo.completed = !this.checkAll
+        axios.put(BASE_URL + '/todoList/' + todo.id, {
+          title: todo.title,
+          completed: !this.checkAll,
+          editing: todo.editing
+        })
+          .then(
+            this.getTodoList
+          )
+          .catch(error => {
+            console.log(error)
+          })
+      })
+    },
+    changeFilter (filter) {
+      this.filter = filter
+    },
+    clearCompleted () {
+      this.todoList.map(todo => {
+        if (todo.completed) {
+          this.removeTodo(todo.id)
+        }
       })
     }
   },
@@ -96,10 +156,26 @@ export default {
       }
     }
   },
-
+  mounted () {
+    this.getTodoList()
+  },
   computed: {
     remainingItem () {
       return this.todoList.filter(todo => !todo.completed).length
+    },
+    filteredTodoList () {
+      // this.getTodoList()
+      switch (this.filter) {
+        case 'active':
+          return this.todoList.filter(todo => todo.completed === false)
+        case 'completed':
+          return this.todoList.filter(todo => todo.completed === true)
+        default:
+          return this.todoList
+      }
+    },
+    clearButton () {
+      return this.todoList.filter(todo => todo.completed === true).length > 0
     }
   }
 }
@@ -151,5 +227,8 @@ export default {
     border-top: solid 1px grey;
     display: flex;
     justify-content: space-between;
+  }
+  .active {
+    background-color: cornflowerblue;
   }
 </style>
